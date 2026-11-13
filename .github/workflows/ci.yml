@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  vistas-herramientas-y-workflows:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: sst_pesv
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sst_pesv"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci_password
+      PGDATABASE: sst_pesv
+
+    steps:
+      - name: Descargar este repositorio
+        uses: actions/checkout@v4
+
+      - name: Descargar el proyecto de base de datos SST/PESV
+        uses: actions/checkout@v4
+        with:
+          repository: sebastianace/proyecto_base_de_datos_en_PostgreSQL
+          path: base_de_datos
+
+      - name: Instalar la base sst_pesv
+        run: psql -v ON_ERROR_STOP=1 -q -f base_de_datos/proyecto/sql/00_instalacion_completa.sql
+
+      - name: Crear las vistas y el rol del agente
+        run: psql -v ON_ERROR_STOP=1 -q -v clave=clave_ci -f sql/01_vistas_asistente.sql
+
+      - name: Cargar datos de demostración
+        run: psql -v ON_ERROR_STOP=1 -q -f sql/02_datos_demo.sql
+
+      - name: Probar las herramientas del agente y los permisos
+        run: python3 tests/probar_herramientas.py
+
+      - name: Validar los workflows de n8n
+        run: python3 tests/validar_workflows.py
